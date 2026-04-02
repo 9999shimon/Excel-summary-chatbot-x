@@ -1,92 +1,62 @@
 import streamlit as st
 import pandas as pd
 
-# Page config
-st.set_page_config(page_title="Excel Summary Chatbot", layout="wide")
+st.set_page_config(page_title="Excel Summary Dashboard", layout="wide")
 
 st.title("📊 Excel Summary Dashboard")
 
-# File uploader
+# Upload file
 uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx"])
 
 if uploaded_file:
-    df = pd.read_excel(uploaded_file)
+    try:
+        # Read Excel
+        df = pd.read_excel(uploaded_file)
 
-    st.subheader("🔍 Raw Data")
-    st.dataframe(df)
+        # Remove unwanted index columns like "Unnamed: 0"
+        df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
 
-    # -------------------------------
-    # Sidebar Filters
-    # -------------------------------
-    st.sidebar.header("🔧 Filters")
+        st.subheader("🔍 Raw Data")
+        st.dataframe(df)
 
-    # ✅ Categorical filters (fixed warning)
-    for col in df.select_dtypes(include=['object', 'string']).columns:
-        unique_vals = df[col].dropna().unique().tolist()
+        # Check if dataframe is empty
+        if df.empty:
+            st.error("❌ Uploaded file has no data. Please upload a valid Excel file.")
+        else:
+            st.subheader("📌 Key Metrics")
+            col1, col2, col3 = st.columns(3)
 
-        selected_vals = st.sidebar.multiselect(
-            f"Select {col}",
-            unique_vals,
-            default=unique_vals
-        )
+            col1.metric("Total Rows", df.shape[0])
+            col2.metric("Columns", df.shape[1])
 
-        df = df[df[col].isin(selected_vals)]
+            # First numeric column sum
+            numeric_cols = df.select_dtypes(include="number").columns
 
-    # ✅ Numeric filters (fixed slider crash)
-    for col in df.select_dtypes(include=['int64', 'float64']).columns:
-        min_val = float(df[col].min())
-        max_val = float(df[col].max())
+            if len(numeric_cols) > 0:
+                col3.metric("Sum (First Numeric)", float(df[numeric_cols[0]].sum()))
+            else:
+                col3.metric("Sum (First Numeric)", "N/A")
 
-        # Handle constant columns
-        if min_val == max_val:
-            st.sidebar.write(f"ℹ️ {col}: constant value ({min_val})")
-            continue
+            # Summary stats
+            st.subheader("📈 Summary Statistics")
+            st.write(df.describe())
 
-        selected_range = st.sidebar.slider(
-            f"Range for {col}",
-            min_val,
-            max_val,
-            (min_val, max_val)
-        )
+            # Visualization
+            st.subheader("📊 Visualizations")
 
-        df = df[(df[col] >= selected_range[0]) & (df[col] <= selected_range[1])]
+            if len(numeric_cols) > 0:
+                selected_col = st.selectbox(
+                    "Select column for chart",
+                    numeric_cols
+                )
 
-    # -------------------------------
-    # KPI Section
-    # -------------------------------
-    st.subheader("📌 Key Metrics")
+                if selected_col:
+                    st.bar_chart(df[selected_col])
+            else:
+                st.warning("⚠️ No numeric columns available for visualization.")
 
-    col1, col2, col3 = st.columns(3)
-
-    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-
-    if len(numeric_cols) >= 1:
-        col1.metric("Total Rows", len(df))
-        col2.metric("Columns", len(df.columns))
-        col3.metric("Sum (First Numeric)", round(df[numeric_cols[0]].sum(), 2))
-
-    # -------------------------------
-    # Summary Stats
-    # -------------------------------
-    st.subheader("📈 Summary Statistics")
-    st.write(df.describe())
-
-    # -------------------------------
-    # Charts
-    # -------------------------------
-    st.subheader("📊 Visualizations")
-
-    if len(numeric_cols) > 0:
-        selected_col = st.selectbox("Select column for chart", numeric_cols)
-
-        st.bar_chart(df[selected_col])
-        st.line_chart(df[selected_col])
-
-    # -------------------------------
-    # Final Filtered Data
-    # -------------------------------
-    st.subheader("✅ Filtered Data")
-    st.dataframe(df)
+    except Exception as e:
+        st.error(f"⚠️ Error processing file: {e}")
 
 else:
-    st.info("👆 Please upload an Excel file to begin.")
+    st.info("📂 Please upload an Excel file to begin.")
